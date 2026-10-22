@@ -1,0 +1,19 @@
+[project]
+name = "crud"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Haji Suleman", email = "mirhajisulemanjamali@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi[standard]>=0.158.1",
+]
+
+[project.scripts]
+crud = "crud:main"
+
+[build-system]
+requires = ["uv_build>=0.12.22,<0.13.0"]
+build-backend = "uv_build"

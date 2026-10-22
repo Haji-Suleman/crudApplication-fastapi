@@ -1,0 +1,12 @@
+{
+    "1001": {
+        "id": "1001",
+        "name": "Ali",
+        "age": 30,
+        "gender": "Male",
+        "weight": 85.0,
+        "height": 1.75,
+        "bmi": 27.76,
+        "verdict": "Overweight"
+    }
+}

@@ -1,0 +1,52 @@
+{
+    "p001": {
+        "id": "p001",
+        "name": "Haji",
+        "age": 16,
+        "gender": "Male",
+        "weight": 50.0,
+        "height": 1.828,
+        "bmi": 14.96,
+        "verdict": "Underweight"
+    },
+    "b002": {
+        "id": "b002",
+        "name": "Ali",
+        "age": 12,
+        "gender": "Male",
+        "weight": 14.0,
+        "height": 0.5,
+        "bmi": 56.0,
+        "verdict": "Obese"
+    },
+    "b003": {
+        "id": "b003",
+        "name": "Zubair",
+        "age": 28,
+        "gender": "Male",
+        "weight": 55.0,
+        "height": 1.3,
+        "bmi": 32.54,
+        "verdict": "Obese"
+    },
+    "b004": {
+        "id": "b004",
+        "name": "Zubair",
+        "age": 28,
+        "gender": "Male",
+        "weight": 55.0,
+        "height": 1.8,
+        "bmi": 16.98,
+        "verdict": "Underweight"
+    },
+    "b005": {
+        "id": "b005",
+        "name": "Zubair",
+        "age": 28,
+        "gender": "Male",
+        "weight": 55.0,
+        "height": 1.5,
+        "bmi": 24.44,
+        "verdict": "Normal"
+    }
+}
