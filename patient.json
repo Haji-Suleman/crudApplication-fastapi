@@ -48,5 +48,15 @@
         "height": 1.5,
         "bmi": 24.44,
         "verdict": "Normal"
+    },
+    "b008": {
+        "id": "b008",
+        "name": "Ali",
+        "age": 30,
+        "gender": "Male",
+        "weight": 70.0,
+        "height": 1.75,
+        "bmi": 22.86,
+        "verdict": "Normal"
     }
 }

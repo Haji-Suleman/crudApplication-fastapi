@@ -1,35 +1,42 @@
-import json
-import os
 from enum import Enum
-from pathlib import Path
 from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlmodel import Field as SQLField
+from sqlmodel import Session, SQLModel, create_engine, select
 
-DATA_FILE = Path(__file__).parent / "patient.json"
-
-
-def load_patients() -> dict[str, dict]:
-    if not DATA_FILE.exists():
-        return {}
-    try:
-        with DATA_FILE.open("r", encoding="utf-8") as f:
-            return json.load(f)
-    except json.JSONDecodeError:
-        return {}
+# ---------- database ----------
+engine = create_engine(
+    "sqlite:///patients.db", connect_args={"check_same_thread": False}
+)
 
 
-def save_patients() -> None:
-    tmp = DATA_FILE.with_suffix(".tmp")
-    with tmp.open("w", encoding="utf-8") as f:
-        json.dump(patients, f, indent=4)
-    os.replace(tmp, DATA_FILE)  # safe swap, avoids a half-written file
+class Patient(SQLModel, table=True):
+    id: str = SQLField(primary_key=True, min_length=4, max_length=4)
+    name: str
+    age: int
+    gender: str
+    weight: float
+    height: float
+    bmi: float
+    verdict: str
 
+
+SQLModel.metadata.create_all(engine)
+
+
+def get_session():
+    with Session(engine) as session:
+        yield session
+
+
+SessionDep = Annotated[Session, Depends(get_session)]
 
 app = FastAPI()
 
 
+# ---------- schemas ----------
 class Gender(str, Enum):
     male = "Male"
     female = "Female"
@@ -37,19 +44,24 @@ class Gender(str, Enum):
 
 
 class Verdict(str, Enum):
-    underweight = "Underweight"  # < 18.5
-    normal = "Normal"  # 18.5 - 24.99
-    overweight = "Overweight"  # 25 - 29.99
-    obese = "Obese"  # 30+
+    underweight = "Underweight"
+    normal = "Normal"
+    overweight = "Overweight"
+    obese = "Obese"
 
 
-class patientSchema(BaseModel):
+class patientSchemaIn(BaseModel):
     id: str = Field(min_length=4, max_length=4)
     name: str
     age: int = Field(gt=0, lt=130)
     gender: Gender
     weight: float = Field(gt=0, description="Weight in kilos")
     height: float = Field(gt=0, description="Height in meters")
+
+
+class patientSchemaOut(patientSchemaIn):
+    bmi: float = Field(gt=0, description="BMI = weight (kg) / height (m)²")
+    verdict: Verdict
 
 
 def calculate_bmi_verdict(height_m: float, weight_kg: float) -> tuple[float, Verdict]:
@@ -65,56 +77,63 @@ def calculate_bmi_verdict(height_m: float, weight_kg: float) -> tuple[float, Ver
     return round(bmi, 2), verdict
 
 
-def build_record(patient: patientSchema) -> dict:
-    record = patient.model_dump(mode="json")
-    bmi, verdict = calculate_bmi_verdict(patient.height, patient.weight)
-    record["bmi"] = bmi
-    record["verdict"] = verdict.value
+def build_patient(data: patientSchemaIn) -> Patient:
+    bmi, verdict = calculate_bmi_verdict(data.height, data.weight)
+    return Patient(
+        **data.model_dump(mode="json"),  # enums become plain strings
+        bmi=bmi,
+        verdict=verdict.value,
+    )
+
+
+# ---------- routes (plain def: SQLite driver is blocking) ----------
+@app.get("/get_patients", response_model=list[patientSchemaOut])
+def full_return(session: SessionDep):
+    return session.exec(select(Patient)).all()
+
+
+@app.get("/get_patient/", response_model=patientSchemaOut)
+def single_patient_return(
+    session: SessionDep,
+    id: Annotated[str, Query(alias="item_id", min_length=4, max_length=4)],
+):
+    patient = session.get(Patient, id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="No patient found by that id")
+    return patient
+
+
+@app.post("/load_patient", status_code=201, response_model=patientSchemaOut)
+def add_patient(patient: patientSchemaIn, session: SessionDep):
+    if session.get(Patient, patient.id):
+        raise HTTPException(status_code=409, detail="Patient already exists")
+    record = build_patient(patient)
+    session.add(record)
+    session.commit()
+    session.refresh(record)
     return record
 
 
-patients: dict[str, dict] = load_patients()
-
-
-@app.get("/get_patients")
-async def full_return():
-    return patients
-
-
-@app.get("/get_patient/")
-async def single_patient_return(
-    id: Annotated[str, Query(alias="item_id", min_length=4, max_length=4)],
-):
-    patient = patients.get(id)
-    if not patient:
-        raise HTTPException(status_code=404, detail="No patient found by that id")
-    return {"success": True, "patient": patient}
-
-
-@app.post("/load_patient", status_code=201)
-async def add_patient(patient: patientSchema):
-    if patient.id in patients:
-        raise HTTPException(status_code=409, detail="Patient already exists")
-    patients[patient.id] = build_record(patient)
-    save_patients()
-    return "Patient added successfully"
-
-
 @app.delete("/delete_patient/")
-async def delete_patient(id: Annotated[str, Query(alias="item_id")]):
-    if patients.pop(id, None) is None:
+def delete_patient(session: SessionDep, id: Annotated[str, Query(alias="item_id")]):
+    patient = session.get(Patient, id)
+    if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
-    save_patients()
+    session.delete(patient)
+    session.commit()
     return "Patient deleted successfully"
 
 
-@app.put("/update_patients/{patient_id}")
-async def update_patient(patient_id: str, patient: patientSchema):
-    if patient_id not in patients:
+@app.put("/update_patients/{patient_id}", response_model=patientSchemaOut)
+def update_patient(patient_id: str, patient: patientSchemaIn, session: SessionDep):
+    old = session.get(Patient, patient_id)
+    if not old:
         raise HTTPException(status_code=404, detail="Patient not found")
-    if patient.id != patient_id and patient.id in patients:
+    if patient.id != patient_id and session.get(Patient, patient.id):
         raise HTTPException(status_code=409, detail="New id already exists")
-    patients.pop(patient_id)
-    patients[patient.id] = build_record(patient)
-    save_patients()
-    return "Patient updated successfully"
+    session.delete(old)
+    new = build_patient(patient)
+    session.add(new)
+    session.commit()
+    session.refresh(new)
+    return new

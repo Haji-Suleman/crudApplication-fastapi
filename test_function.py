@@ -16,7 +16,8 @@ def test_add_patient(client):
 def test_bmi_and_verdict_are_calculated(client):
     client.post("/load_patient", json=VALID_PATIENT)
     response = client.get("/get_patient/", params={"item_id": "1001"})
-    patient = response.json()["patient"]
+    patient = response.json()
+    print(patient)
     assert patient["bmi"] == 22.86
     assert patient["verdict"] == "Normal"
 
@@ -56,6 +57,6 @@ def test_update_patient_recalculates_bmi(client):
     client.post("/load_patient", json=VALID_PATIENT)
     updated = {**VALID_PATIENT, "weight": 85}
     assert client.put("/update_patients/1001", json=updated).status_code == 200
-    patient = client.get("/get_patient/", params={"item_id": "1001"}).json()["patient"]
+    patient = client.get("/get_patient/", params={"item_id": "1001"}).json()
     assert patient["bmi"] == 27.76
     assert patient["verdict"] == "Overweight"
